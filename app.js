@@ -922,5 +922,47 @@ async function startServer() {
         process.exit(1);
     }
 }
+// 保活自唤醒函数 (Keep-Alive)
+function startKeepAlive() {
+    // 优先使用环境变量中配置的外部域名，否则退回到 localhost 访问
+    const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+    
+    // 大多数云平台是 15 分钟休眠，这里设置为 14 分钟 (840000 毫秒) 触发一次
+    const interval = 14 * 60 * 1000; 
+
+    setInterval(async () => {
+        try {
+            await axios.get(appUrl, { timeout: 5000 });
+            console.log(`[Keep-Alive] 成功访问保活路由: ${new Date().toLocaleString()}`);
+        } catch (error) {
+            console.error(`[Keep-Alive] 访问失败: ${error.message}`);
+        }
+    }, interval);
+}
+
+// 先初始化数据再启动http服务
+async function startServer() {
+    try {
+        await ensureDataDir();
+        await initializeCredentialsFile();
+        credentials = await loadCredentials();
+        console.log('Credentials initialized and loaded successfully');
+        await initializeDataFile();
+        
+        // 启动服务器
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+            console.log(`Subscription route is /${SUB_TOKEN}`);
+            console.log(`Admin page is available at /`);
+            
+            // ---> 在服务器启动后调用保活函数 <---
+            startKeepAlive();
+        });
+    } catch (error) {
+        console.error('Error starting server:', error);
+        process.exit(1);
+    }
+}
 
 startServer();
+
