@@ -922,47 +922,51 @@ async function startServer() {
         process.exit(1);
     }
 }
-// 保活自唤醒函数 (Keep-Alive)
+// ==========================================
+// 强制保活与自唤醒逻辑 (防止 15 分钟休眠)
+// ==========================================
 function startKeepAlive() {
-    // 优先使用环境变量中配置的外部域名，否则退回到 localhost 访问
-    const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
-    
-    // 大多数云平台是 15 分钟休眠，这里设置为 14 分钟 (840000 毫秒) 触发一次
-    const interval = 14 * 60 * 1000; 
+    // 设置为 14 分钟 (840000 毫秒)，赶在平台 15 分钟休眠前触发
+    const interval = 14 * 60 * 1000;
 
     setInterval(async () => {
-        try {
-            await axios.get(appUrl, { timeout: 5000 });
-            console.log(`[Keep-Alive] 成功访问保活路由: ${new Date().toLocaleString()}`);
-        } catch (error) {
-            console.error(`[Keep-Alive] 访问失败: ${error.message}`);
+        const timeStr = new Date().toLocaleString();
+        console.log(`\n[${timeStr}] ⏰ 触发内部强制保活任务...`);
+
+        // 收集需要定时访问的目标 URL
+        const urlsToPing = [];
+        
+        // 1. 本地服务探活
+        urlsToPing.push(`http://localhost:${PORT}`);
+        
+        // 2. 外部项目 URL 探活 (如果配置了的话)
+        if (PROJECT_URL && PROJECT_URL.startsWith('http')) {
+            urlsToPing.push(PROJECT_URL);
+        }
+
+        // 遍历发送 HTTP 请求
+        for (const targetUrl of urlsToPing) {
+            try {
+                const res = await axios.get(targetUrl, { timeout: 10000 });
+                console.log(`[Keep-Alive] 成功唤醒: ${targetUrl} (Status: ${res.status})`);
+            } catch (err) {
+                // 对于保活来说，返回 401、404 甚至 502 都算成功唤醒，因为只要有 HTTP 流量经过网关即可
+                if (err.response) {
+                    console.log(`[Keep-Alive] 成功唤醒: ${targetUrl} (Status: ${err.response.status})`);
+                } else {
+                    console.error(`[Keep-Alive] 访问异常 ${targetUrl}: ${err.message}`);
+                }
+            }
         }
     }, interval);
 }
 
-// 先初始化数据再启动http服务
-async function startServer() {
-    try {
-        await ensureDataDir();
-        await initializeCredentialsFile();
-        credentials = await loadCredentials();
-        console.log('Credentials initialized and loaded successfully');
-        await initializeDataFile();
-        
-        // 启动服务器
-        app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
-            console.log(`Subscription route is /${SUB_TOKEN}`);
-            console.log(`Admin page is available at /`);
-            
-            // ---> 在服务器启动后调用保活函数 <---
-            startKeepAlive();
-        });
-    } catch (error) {
-        console.error('Error starting server:', error);
-        process.exit(1);
-    }
-}
-
-startServer();
+// 启动 http 服务器
+server.listen(PORT, () => {
+    console.log(`http server is running on port:${PORT}!`);
+    
+    // 在 HTTP 服务成功启动后，挂载并开始定时保活循环
+    startKeepAlive();
+    console.log(`[Keep-Alive] 内部强制保活已启动，每 14 分钟执行一次`);
+});
 
