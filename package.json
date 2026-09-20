@@ -1,0 +1,21 @@
+{
+    "name": "merge-sub",
+    "version": "1.0.0",
+    "description": "nodejs",
+    "author": "eooce",
+    "repository": "",
+    "license": "MIT",
+    "main": "app.js",
+    "private": false,
+    "scripts": {
+        "start": "node app.js"
+    },
+    "dependencies": {
+        "axios": "^1.13.5",
+        "basic-auth": "^2.0.1",
+        "express": "latest"
+    },
+    "engines": {
+        "node": ">=14"
+    }
+}
